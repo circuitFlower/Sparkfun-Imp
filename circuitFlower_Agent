@@ -1,30 +1,8 @@
-/*  electric imp Web Response Example (agent)
-    by: Jim Lindblom
-    SparkFun Electronics
-    date: November 5, 2013
-    modified by: Amanda Ervin
-    modified date: 6/17/2014
-    license: Beerware. Use, reuse, and modify this code however you see fit.
-    If you find it useful, buy me a beer some day!
-
-    The agent half of this code accomplishes two tasks:
-    1. In the device.on("impValues", function) definitions, the agent receives
-    a table of pin values from the imp. It stores those values in a global
-    variables.
-    2. On an http request, respondImpValues(request, response) is called. This
-    function constructs a JSON of the imp pin values, and responds with that.
-
-    Also, check the comment at the bottom of this code for an example HTML file,
-    which sends a request to the imp, then parses and prints the response.
-*/
-
-//////////////////////
-// Global Variables //
-//////////////////////
-   // Stores pin 2 value received from imp
-_pin2 <- "";
-_voltage <- "";
-
+ // Stores pin 2 value received from imp
+_x <- "";
+_y <- "";
+_z <- "";
+_change <- "";
 //////////////////////////
 // Function Definitions //
 //////////////////////////
@@ -35,15 +13,17 @@ _voltage <- "";
 function respondImpValues(request,response){
 
     // First, construct a JSON table with our received pin values.
-    local pinTable = {
+    local xyzTable = {
           // e.g.: "pin1" : "1"
-        "pin2": ""+_pin2+"",
-        "voltage": ""+_voltage+"" + " V",   // e.g.: "voltage" : "3.274 V"
+        "x": ""+_x+"",
+        "y": ""+_y+"",
+        "z": ""+_z+"",
+        "change": ""+_change+"",// e.g.: "voltage" : "3.274 V"
     }
 
     // the http.jsonencode(object) function takes a squirrel variable and returns a
     // standardized JSON string. - https://electricimp.com/docs/api/http/jsonencode/
-    local jvars = http.jsonencode(pinTable);
+    local jvars = http.jsonencode(xyzTable);
 
     // Attach a header to our response.
     // "Access-Control-Allow-Origin: *" allows cross-origin resource sharing
@@ -60,9 +40,11 @@ function respondImpValues(request,response){
 // device.on("impValues") will be called whenever an "impValues" request is sent
 // from the device side. This simple function simply fills up our global variables
 // with the equivalent vars received from the imp.
-device.on("impValues", function(iv) {
-    _pin2 = iv.pin2;
-    _voltage = iv.voltage;
+device.on("xyzValues", function(iv) {
+    _x = iv.x;
+    _y = iv.y;
+    _z = iv.z;
+    _change = iv.change;
     });
 
 ///////////
