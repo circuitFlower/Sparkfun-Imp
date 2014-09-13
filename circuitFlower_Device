@@ -1,63 +1,87 @@
-/*  electric imp Web Response Example (device)
-    by: Jim Lindblom
-    SparkFun Electronics
-    date: November 5, 2013
-    modified by: Amanda Ervin
-    date modified: 6/17/2014
-    license: Beerware. Use, reuse, and modify this code however you see fit.
-    If you find it useful, buy me a beer some day!
-    The idea for this code was inspired by this gist by industrialinternet:
-    https://gist.github.com/industrialinternet/5419730
+//code taken from https://gist.github.com/alexbain/8392153
 
-    This example code demonstrates how an imp can publish information to a
-    webpage. Pin 2 is configured as an input. It can be either
-    digital or analog. 
-
-    There are three parts to this code:
-    1. The imp (device) code. The imp itself simply reads its pin values, and
-        sends them out to the agent.
-    2. The agent code. The agent waits for an http request. On such a request,
-        it'll construct a JSON of the imp's pin values, and respond with that.
-    3. An html page to make the http request and handle the response from the agent.
-        There are a number of ways to do this. See one example at the bottom of
-        The agent code.
-*/
-
-///////////
-// Setup //
-///////////
-
-// Register imp. This good practice: 
-imp.configure("Imp Pin Web Response",[],[]);
-
-// Configure pins:
-
-hardware.pin2.configure(ANALOG_IN);
-
-//////////////////////////
-// Function Definitions //
-//////////////////////////
-
-// sendPins reads each of the pins, stores them in a table, and sends that 
-// table out to the agent.
-// It calls itself every 100ms -- 10 times a second.
-function sendPins()
-{
-    // Read each of the pins and store them in a table.
-    // The key names -- "pin1", "pin2", etc. -- should be kept the same, unless
-    // you also change them in the device.on() function on the agent.
-    local pinValues = 
-    {
-        pin2 = hardware.pin2.read(),
-        voltage = hardware.voltage()    // We'll also send the operating voltage.
-    }
+total <- 0; // Sum of % change from all samples
+n <- 0;     // Counter for number of samples read
+last <- 1;  // Previous reading of magnitude
+ 
+function readSensor() {
+    // Time interval
+    local interval = 0.02;
+    
+    // Get source voltage, should be 3.3V
+    local vRef = hardware.voltage();
+       
+    // Read in ADC values from accelerometer
+    local adcRx = hardware.pin5.read();
+    local adcRy = hardware.pin2.read();
+    local adcRz = hardware.pin1.read();  
+    // server.log(format("Raw ADC values: %f, %f, %f", adcRx, adcRy, adcRz));
+       
+    // Convert 16bit ADC accelerometer values (0-65535) into voltage
+    local voltsRx = (adcRx * vRef) / 65535.0;
+    local voltsRy = (adcRy * vRef) / 65535.0;
+    local voltsRz = (adcRz * vRef) / 65535.0;
+    // server.log(format("Voltages: %f, %f %f", voltsRx, voltsRy, voltsRz));
+      
+    // Subtract 0g (1.5V at 3V, 1.65V at 3.3V)
+    local deltaVoltsRx = voltsRx - (vRef / 2);
+    local deltaVoltsRy = voltsRy - (vRef / 2);
+    local deltaVoltsRz = voltsRz - (vRef / 2);  
+    // server.log(format("Adjusted voltages %f, %f, %f", deltaVoltsRx, deltaVoltsRy, deltaVoltsRz));
+     
+    // Convert from voltage to g, using sensitivity of 300mV
+    local rX = deltaVoltsRx / 0.3;
+    local rY = deltaVoltsRy / 0.3;
+    local rZ = deltaVoltsRz / 0.3;
+    // server.log(format("Gs: %f, %f, %f", rX, rY, rZ));
+    
 
     // Once the table is constructed, send it out to the agent with "impValues"
     // as the identifier.
-    agent.send("impValues", pinValues);
-
-    // Schedule a wakeup in 100ms, with a callback to this function.
-    imp.wakeup(0.1, sendPins);
+    
+    
+    // Compute magnitude of force
+    local magnitude = math.sqrt(math.pow(rX,2) + math.pow(rY, 2) + math.pow(rZ, 2));
+    
+    // Compute % change since last reading
+    local change = math.fabs((magnitude - last)/last) * 100.0; 
+    local xyzValues = 
+    {
+        x = rX,
+        y = rY,
+        z = rZ,
+        change = change,// We'll also send the operating voltage.
+    }
+    agent.send("xyzValues", xyzValues);
+    // Store magnitude in last for next time
+    last = magnitude;
+    
+    // Log magnitude and percent change
+    server.log(format("magnitude: %f, change amount: %f", magnitude, change));
+    
+    // Increment total with % change, increment N
+    total = total + change;
+    n = n + 1;
+    
+    // Log data to server once ever 250 samples (5 seconds)
+    if (n >= 2) {
+        agent.send("data", total);
+        n = 0;
+        total = 0;
+    }
+    
+    // Sleep until time to read sensor again
+    imp.wakeup(interval, readSensor);
 }
-
-sendPins(); // Call sendPins once, and let it do the rest of the work.
+ 
+// X input
+hardware.pin1.configure(ANALOG_IN);
+ 
+// Y input
+hardware.pin2.configure(ANALOG_IN);
+ 
+// Z input
+hardware.pin5.configure(ANALOG_IN);
+ 
+// Start reading the sensor
+readSensor();
